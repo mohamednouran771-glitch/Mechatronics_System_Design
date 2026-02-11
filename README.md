@@ -171,22 +171,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 
 ---
 
-# 🗂 Repository Structure
-
-```
-├── docs/
-│   ├── technical_report.pdf
-│   └── images/
-├── mechanical/
-│   ├── CAD_files/
-│   └── STL/
-├── electronics/
-│   ├── schematics/
-│   └── PCB/
-├── firmware/
-├── software/
-├── simulation/
-└── videos/
 ```
 
 ---
@@ -204,7 +188,7 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 
 # 🛠 Tools & Technologies
 
-- SolidWorks / Fusion 360
+-inventor / Fusion 360
 - MATLAB / Simulink
 - Embedded C/C++
 - Python (OpenCV, QR detection)
@@ -212,14 +196,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - 3D Printing / Laser Cutting
 
 ---
-
-# 📹 Demonstrations
-
-| Demo | Link |
-|------|------|
-| System Walkthrough | Coming Soon |
-| Autonomous Demo | Coming Soon |
-| Competition Run | Coming Soon |
 
 ---
 
@@ -245,12 +221,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - Advanced obstacle avoidance
 
 ---
-
-# 📜 License
-
-Academic project – Developed for MCT333/MCT344  
-Ain Shams University – 2026
-
 ---
 
 <p align="center">
