@@ -132,7 +132,7 @@ flowchart TD
     F --> G[Navigate to Drop Zone]
     G --> H[Execute Constrained Motion]
     H --> I[Place Cube]
-```
+
 
 ---
 
@@ -169,9 +169,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - No exposed terminals
 - Dimension compliance check
 
----
-
-```
 
 ---
 
@@ -197,8 +194,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 
 ---
 
----
-
 # 👥 Team
 
 | Role | Name |
@@ -220,7 +215,6 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - Improved gripper compliance
 - Advanced obstacle avoidance
 
----
 ---
 
 <p align="center">
