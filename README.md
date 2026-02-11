@@ -132,7 +132,7 @@ flowchart TD
     F --> G[Navigate to Drop Zone]
     G --> H[Execute Constrained Motion]
     H --> I[Place Cube]
-
+```
 
 ---
 
@@ -170,6 +170,7 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - Dimension compliance check
 
 
+
 ---
 
 # 🏁 Competition Performance Criteria
@@ -185,12 +186,13 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 
 # 🛠 Tools & Technologies
 
--inventor / Fusion 360
+- Inventor / Fusion 360
 - MATLAB / Simulink
 - Embedded C/C++
 - Python (OpenCV, QR detection)
 - Git
 - 3D Printing / Laser Cutting
+
 
 ---
 
@@ -214,6 +216,7 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 - ROS-based modular architecture
 - Improved gripper compliance
 - Advanced obstacle avoidance
+
 
 ---
 
