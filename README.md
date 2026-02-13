@@ -200,12 +200,13 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 
 | Role | Name |
 |------|------|
-| Project Manager | |
-| Mechanical Lead | |
-| Electronics Lead | |
-| Embedded Lead | |
-| Software Lead | |
-| Controls Lead | |
+| Project Manager |Nouran Mohamed Hassan|
+| Mechanical Lead |Mohammed Ibrahim |
+| Electronics Lead | Nouran Mohamed Hassan|
+| Embedded Lead | Hanan Ahmed|
+| Perciption Lead | Malak Sherif|
+| Actuation & Power Lead |Heba Rabea |
+| Controls & Estimation Lead | Fady Ramy |
 
 ---
 
