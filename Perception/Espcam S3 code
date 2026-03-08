@@ -1,0 +1,361 @@
+#include "esp_camera.h"
+#include <WiFi.h>
+#include <WebServer.h>
+#include "quirc.h"
+
+const char* ssid = "ESPCAM";
+const char* password = "12345678";
+
+WebServer server(80);
+WiFiServer streamServer(81);
+
+// CAMERA PINS
+#define PWDN_GPIO_NUM     -1
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM     15
+#define SIOD_GPIO_NUM     4
+#define SIOC_GPIO_NUM     5
+#define Y9_GPIO_NUM       16
+#define Y8_GPIO_NUM       17
+#define Y7_GPIO_NUM       18
+#define Y6_GPIO_NUM       12
+#define Y5_GPIO_NUM       10
+#define Y4_GPIO_NUM       8
+#define Y3_GPIO_NUM       9
+#define Y2_GPIO_NUM       11
+#define VSYNC_GPIO_NUM    6
+#define HREF_GPIO_NUM     7
+#define PCLK_GPIO_NUM     13
+
+struct quirc *qr = NULL;
+String latest_qr = "";
+volatile bool new_qr_ready = false;
+
+// ----------------------------------------------------
+// HTML Dashboard
+// ----------------------------------------------------
+const char* index_html = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Max-FPS QR & Stream</title>
+  <style>
+    body { background: #121212; color: #eee; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; margin: 0; padding: 20px; }
+    h2 { color: #4CAF50; }
+    p { color: #888; margin-bottom: 20px; text-align: center;}
+    canvas { 
+      background: #000;
+      border: 1px solid #333; 
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+      image-rendering: auto; 
+      width: 640px; 
+      transform: scaleX(-1); /* Mirror camera */
+    }
+    #fps { font-weight: bold; color: #ff9800; }
+    #qr_result { margin-top: 15px; padding: 10px; background: #222; border-radius: 5px; width: 620px; text-align: center; font-family: monospace; font-size: 22px; color: #00FF00; min-height: 30px; word-wrap: break-word; transition: 0.3s;}
+  </style>
+</head>
+<body>
+  <h2>QR Scanner & Live Feed (Dual-Port)</h2>
+  <p>QR scanning and UI on Port 80. Raw Video on Port 81.<br>Zero Threads Blocked | Stream FPS: <span id="fps">0</span></p>
+  <canvas id="canvas"></canvas>
+  <div id="qr_result">Waiting for QR Code...</div>
+  
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const fpsElem = document.getElementById('fps');
+    
+    let imgData = null;
+    let frames = 0;
+    setInterval(() => { fpsElem.innerText = frames; frames = 0; }, 1000);
+
+    // Fetch QR on the control port (80) smoothly
+    setInterval(async () => {
+      try {
+        let r = await fetch('/qr');
+        if (!r.ok) return;
+        let txt = await r.text();
+        if (txt && txt.trim() !== "") {
+            const el = document.getElementById('qr_result');
+            el.innerText = txt;
+            el.style.color = '#fff';
+            el.style.backgroundColor = '#e91e63';
+            setTimeout(()=>{el.style.color='#00FF00'; el.style.backgroundColor='#222';}, 800);
+        }
+      } catch(e) {}
+    }, 500);
+
+    // Fetch Video on the dedicated stream port (81)
+    async function stream() {
+      while(true) {
+        try {
+          const streamUrl = 'http://' + window.location.hostname + ':81/';
+          const res = await fetch(streamUrl);
+          if (!res.ok) {
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          }
+          const reader = res.body.getReader();
+          let buffer = new Uint8Array(0);
+          
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            let newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer, 0);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+            
+            while (buffer.length >= 12) {
+              if (buffer[0] !== 0xAA || buffer[1] !== 0xBB || buffer[2] !== 0xCC || buffer[3] !== 0xDD) {
+                let found = false;
+                for(let i=1; i < buffer.length - 3; i++) {
+                  if (buffer[i] === 0xAA && buffer[i+1] === 0xBB && buffer[i+2] === 0xCC && buffer[i+3] === 0xDD) {
+                    buffer = buffer.slice(i);
+                    found = true;
+                    break;
+                  }
+                }
+                if(!found){ buffer = new Uint8Array(0); break; }
+              }
+              if(buffer.length < 12) break;
+              
+              const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+              const width = view.getUint16(4, true);
+              const height = view.getUint16(6, true);
+              const len = view.getUint32(8, true);
+              
+              if (buffer.length >= 12 + len) {
+                const frameData = buffer.slice(12, 12 + len);
+                buffer = buffer.slice(12 + len); 
+                
+                if(canvas.width !== width || canvas.height !== height) {
+                  canvas.width = width;
+                  canvas.height = height;
+                  imgData = ctx.createImageData(width, height);
+                }
+                
+                for (let i = 0; i < len; i++) {
+                  let p = i * 4;
+                  imgData.data[p] = frameData[i];     // R
+                  imgData.data[p + 1] = frameData[i]; // G
+                  imgData.data[p + 2] = frameData[i]; // B
+                  imgData.data[p + 3] = 255;          // Alpha
+                }
+                ctx.putImageData(imgData, 0, 0);
+                frames++;
+              } else {
+                break; 
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Stream disconnect/error:", err);
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    stream();
+  </script>
+</body>
+</html>
+)rawliteral";
+
+void handleRoot() {
+  server.send(200, "text/html", index_html);
+}
+
+void handleQR() {
+  if (new_qr_ready) {
+    server.send(200, "text/plain", latest_qr);
+    new_qr_ready = false; 
+  } else {
+    server.send(200, "text/plain", "");
+  }
+}
+
+// ----------------------------------------------------
+// QR Code Reader Task (Running on FreeRTOS Core 0)
+// ----------------------------------------------------
+void qrTask(void *pvParameters) {
+  qr = quirc_new();
+  if (qr) {
+      Serial.println("QR Code Decoder initialized on Core 0.");
+  } else {
+      Serial.println("WARNING: Failed to allocate memory for QR decoder.");
+      vTaskDelete(NULL);
+  }
+
+  while (true) {
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb) {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    if (quirc_resize(qr, fb->width, fb->height) == 0) {
+      uint8_t *image = quirc_begin(qr, NULL, NULL);
+      if (image) {
+        memcpy(image, fb->buf, fb->len);
+        quirc_end(qr);
+        
+        int num_codes = quirc_count(qr);
+        if (num_codes > 0) {
+          static struct quirc_code code;
+          static struct quirc_data data;
+          quirc_extract(qr, 0, &code);
+          
+          if (!quirc_decode(&code, &data)) {
+            String payload = String((char*)data.payload);
+            
+            Serial.println("\n#################################");
+            Serial.print("QR FOUND: ");
+            Serial.println(payload);
+            Serial.println("#################################\n");
+            
+            latest_qr = payload;
+            new_qr_ready = true;
+          }
+        }
+      }
+    }
+
+    esp_camera_fb_return(fb);
+    vTaskDelay(300 / portTICK_PERIOD_MS); // Run scanner approx 3 times a second
+  }
+}
+
+// ----------------------------------------------------
+// Core Setup & Loop
+// ----------------------------------------------------
+void setup() {
+  Serial.begin(115200);
+  delay(1000); 
+  Serial.println("\n--- ESP32 Camera Booting (Dual-Port Mode) ---");
+
+  bool has_psram = psramFound();
+  if (has_psram) {
+    Serial.printf(">>> PSRAM DETECTED: %d bytes\n", ESP.getPsramSize());
+  } else {
+    Serial.println(">>> NO PSRAM DETECTED");
+  }
+
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer   = LEDC_TIMER_0;
+  config.pin_d0       = Y2_GPIO_NUM;
+  config.pin_d1       = Y3_GPIO_NUM;
+  config.pin_d2       = Y4_GPIO_NUM;
+  config.pin_d3       = Y5_GPIO_NUM;
+  config.pin_d4       = Y6_GPIO_NUM;
+  config.pin_d5       = Y7_GPIO_NUM;
+  config.pin_d6       = Y8_GPIO_NUM;
+  config.pin_d7       = Y9_GPIO_NUM;
+  config.pin_xclk     = XCLK_GPIO_NUM;
+  config.pin_pclk     = PCLK_GPIO_NUM;
+  config.pin_vsync    = VSYNC_GPIO_NUM;
+  config.pin_href     = HREF_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn     = PWDN_GPIO_NUM;
+  config.pin_reset    = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  
+  config.pixel_format = PIXFORMAT_GRAYSCALE;   
+  config.frame_size   = FRAMESIZE_QVGA;  // 320x240 ideal for robust QR tracking 
+  config.jpeg_quality = 12; 
+  
+  if (has_psram) {
+    config.fb_count     = 2;            
+    config.fb_location  = CAMERA_FB_IN_PSRAM;
+    config.grab_mode    = CAMERA_GRAB_LATEST;
+  } else {
+    config.fb_count     = 1;
+    config.fb_location  = CAMERA_FB_IN_DRAM;
+    config.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
+  }
+
+  if (esp_camera_init(&config) != ESP_OK) {
+    Serial.println("Camera init totally failed!");
+    while (true);
+  }
+
+  // Restore Default sensor settings to prevent crushing details
+  sensor_t * s = esp_camera_sensor_get();
+  s->set_contrast(s, 0);       
+  s->set_brightness(s, 0);    
+  s->set_saturation(s, 0);    
+  
+  // Launch QR task completely independently on Core 0
+  xTaskCreatePinnedToCore(qrTask, "QR Task", 15000, NULL, 1, NULL, 0);
+
+  // Start Access Point mode
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, password);
+  Serial.println("\nAccess Point Started!");
+  
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP Address: ");
+  Serial.println(IP);
+  Serial.println("\n===============================================");
+  Serial.print("1. Connect your mobile device to Wi-Fi: ");
+  Serial.println(ssid);
+  Serial.print("   Password: ");
+  Serial.println(password);
+  Serial.print("2. Open browser and go to watch stream: http://");
+  Serial.println(IP);
+  Serial.println("===============================================\n");
+
+  // Port 80 handles UI and Control Endpoints rapidly
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/qr", HTTP_GET, handleQR);
+  server.onNotFound([]() { server.send(404, "text/plain", "Not Found"); });
+  server.begin();
+
+  // Port 81 directly handles raw streaming payload
+  streamServer.begin();
+  Serial.println("Web Server on Port 80, Stream Server on Port 81");
+}
+
+WiFiClient activeStreamClient;
+const uint8_t magic_video[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+
+void loop() {
+  server.handleClient(); // Handles port 80 effortlessly
+
+  // Check Port 81 for stream connections
+  if (streamServer.hasClient()) {
+    if (activeStreamClient) activeStreamClient.stop();
+    activeStreamClient = streamServer.available();
+    
+    // Send HTTP headers manually on this raw socket
+    activeStreamClient.println("HTTP/1.1 200 OK");
+    activeStreamClient.println("Content-Type: application/octet-stream");
+    activeStreamClient.println("Connection: close");
+    activeStreamClient.println("Access-Control-Allow-Origin: *");
+    activeStreamClient.println();
+  }
+
+  // Rapidly write raw frames to stream socket without blocking loop
+  if (activeStreamClient && activeStreamClient.connected()) {
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (fb) {
+      uint16_t w = fb->width;
+      uint16_t h = fb->height;
+      uint32_t len = fb->len;
+
+      activeStreamClient.write(magic_video, 4);
+      activeStreamClient.write((uint8_t*)&w, 2);
+      activeStreamClient.write((uint8_t*)&h, 2);
+      activeStreamClient.write((uint8_t*)&len, 4);
+      activeStreamClient.write(fb->buf, len);
+      esp_camera_fb_return(fb);
+    }
+  }
+
+  delay(1);
+}
