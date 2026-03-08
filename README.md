@@ -20,12 +20,10 @@ Ain Shams University – Faculty of Engineering
 ## 📸 Project Preview
 
 <p align="center">
-  <img src="docs/images/robot_render.png" width="600"/>
+  <img src="Mechanical/kkkk.png" width="700"/>
 </p>
 
-> Replace the image above with your CAD render or real robot photo.
-
----
+> CAD design of the mobile robot platform with robotic arm.
 
 # 📌 Overview
 
@@ -201,12 +199,12 @@ This project follows **VDI 2206 Mechatronic V-Model**:
 | Role | Name |
 |------|------|
 | Project Manager |Nouran Mohamed Hassan|
-| Mechanical Lead |Mohammed Ibrahim |
-| Electronics Lead | Nouran Mohamed Hassan|
+| Mechanical Lead |Nouran Mohamed Hassan |
+| Electronics Lead | Fady Ramy|
 | Embedded Lead | Hanan Ahmed|
 | Perciption Lead | Malak Sherif|
 | Actuation & Power Lead |Heba Rabea |
-| Controls & Estimation Lead | Fady Ramy |
+| Controls & Estimation Lead | Mohammed Ibrahim |
 
 ---
 
